@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+
 import {
   authorDisplayNameFromRow,
   authorLabelFrom,
@@ -15,15 +16,16 @@ export interface Echo {
   userId: string;
   createdAt: string;
   isAnonymous: boolean;
-  /** 展示用：匿名 或 用户昵称 */
   authorLabel: string;
+  parentId?: string | null;
+  rootId?: string | null;
 }
 
 interface SubmitEchoInput {
   articleId: string;
   content: string;
-  /** 为 true 时前台显示匿名，不展示昵称 */
   isAnonymous?: boolean;
+  parentId?: string;
 }
 
 interface SubmitEchoResult {
@@ -54,6 +56,8 @@ function mapEchoRow(row: RawEcho): MappedEchoRow {
       new Date(0).toISOString(),
     isAnonymous: Boolean(row.is_anonymous),
     authorDisplayName: authorDisplayNameFromRow(row),
+    parentId: row.parent_id ? String(row.parent_id) : null,
+    rootId: row.root_id ? String(row.root_id) : null,
   };
 }
 
@@ -86,15 +90,19 @@ export async function fetchEchoes(articleId: string): Promise<Echo[]> {
       createdAt: base.createdAt,
       isAnonymous: base.isAnonymous,
       authorLabel: authorLabelFrom(base.isAnonymous, base.authorDisplayName),
+      parentId: base.parentId,
+      rootId: base.rootId,
     };
   });
 }
 
-export async function submitEcho(input: SubmitEchoInput): Promise<SubmitEchoResult> {
+export async function submitEcho(
+  input: SubmitEchoInput
+): Promise<SubmitEchoResult> {
   if (!input.articleId) {
     return {
       success: false,
-      message: "文章不存在，无法发送回音",
+      message: "文章不存在，无法发送回响。",
     };
   }
 
@@ -103,7 +111,7 @@ export async function submitEcho(input: SubmitEchoInput): Promise<SubmitEchoResu
   if (!content) {
     return {
       success: false,
-      message: "请写下回音内容",
+      message: "请写下回响内容。",
     };
   }
 
@@ -111,6 +119,7 @@ export async function submitEcho(input: SubmitEchoInput): Promise<SubmitEchoResu
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
   if (!user) {
     return {
       success: false,
@@ -119,17 +128,57 @@ export async function submitEcho(input: SubmitEchoInput): Promise<SubmitEchoResu
   }
 
   const isAnonymous = Boolean(input.isAnonymous);
-  const authorDisplayName = await resolveCurrentAuthorDisplayName(supabase, user);
+  const authorDisplayName = await resolveCurrentAuthorDisplayName(
+    supabase,
+    user
+  );
+
+  const insertPayload: Record<string, unknown> = {
+    article_id: input.articleId,
+    content,
+    user_id: user.id,
+    is_anonymous: isAnonymous,
+    author_display_name: authorDisplayName,
+  };
+
+  if (input.parentId) {
+    const { data: parentEcho, error: parentError } = await supabase
+      .from("echoes")
+      .select("id, article_id, root_id")
+      .eq("id", input.parentId)
+      .maybeSingle();
+
+    if (parentError) {
+      console.error("[submitEcho] Failed to load parent echo:", parentError);
+      return {
+        success: false,
+        message: "暂时无法确认回复目标，请稍后重试。",
+      };
+    }
+
+    if (!parentEcho) {
+      return {
+        success: false,
+        message: "你要回复的这条回响已经不存在了。",
+      };
+    }
+
+    if (String(parentEcho.article_id ?? "") !== input.articleId) {
+      return {
+        success: false,
+        message: "回复目标与当前文章不匹配。",
+      };
+    }
+
+    insertPayload.parent_id = input.parentId;
+    insertPayload.root_id = parentEcho.root_id
+      ? String(parentEcho.root_id)
+      : input.parentId;
+  }
 
   const { data, error } = await supabase
     .from("echoes")
-    .insert({
-      article_id: input.articleId,
-      content,
-      user_id: user.id,
-      is_anonymous: isAnonymous,
-      author_display_name: authorDisplayName,
-    })
+    .insert(insertPayload)
     .select("*")
     .single();
 
@@ -151,6 +200,8 @@ export async function submitEcho(input: SubmitEchoInput): Promise<SubmitEchoResu
     createdAt: base.createdAt,
     isAnonymous: base.isAnonymous,
     authorLabel: authorLabelFrom(base.isAnonymous, base.authorDisplayName),
+    parentId: base.parentId,
+    rootId: base.rootId,
   };
 
   revalidatePath("/", "layout");
