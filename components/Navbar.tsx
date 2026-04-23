@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Archive, ChevronDown, ChevronRight, Menu, PenLine, PenSquare, Search, X } from "lucide-react";
@@ -65,13 +65,18 @@ function isNavGroup(item: PrimaryNavItem): item is NavGroupItem {
   return "items" in item;
 }
 
+const DESKTOP_MENU_VIEWPORT_PADDING = 16;
+
 export default function Navbar({ articleId }: NavbarProps) { // 接收 articleId
   const router = useRouter();
   const navRef = useRef<HTMLElement>(null);
   const prefetchedRoutesRef = useRef<Set<string>>(new Set());
+  const desktopMenuTriggerRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const desktopMenuPanelRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [openDesktopMenu, setOpenDesktopMenu] = useState<string | null>(null);
   const [openMobileGroup, setOpenMobileGroup] = useState<string | null>(null);
+  const [desktopMenuLeft, setDesktopMenuLeft] = useState<number | null>(null);
   const [user, setUser] = useState<UserInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -163,6 +168,41 @@ export default function Navbar({ articleId }: NavbarProps) { // 接收 articleId
     return () => window.removeEventListener("mousedown", handlePointerDown);
   }, [openDesktopMenu]);
 
+  useLayoutEffect(() => {
+    if (!openDesktopMenu) {
+      setDesktopMenuLeft(null);
+      return;
+    }
+
+    const updateDesktopMenuPosition = () => {
+      const trigger = desktopMenuTriggerRefs.current[openDesktopMenu];
+      const panel = desktopMenuPanelRefs.current[openDesktopMenu];
+
+      if (!trigger || !panel) {
+        return;
+      }
+
+      const triggerRect = trigger.getBoundingClientRect();
+      const panelRect = panel.getBoundingClientRect();
+      const centeredLeft = triggerRect.left + triggerRect.width / 2 - panelRect.width / 2;
+      const maxLeft = Math.max(
+        DESKTOP_MENU_VIEWPORT_PADDING,
+        window.innerWidth - DESKTOP_MENU_VIEWPORT_PADDING - panelRect.width
+      );
+      const clampedLeft = Math.min(
+        Math.max(centeredLeft, DESKTOP_MENU_VIEWPORT_PADDING),
+        maxLeft
+      );
+
+      setDesktopMenuLeft(clampedLeft - triggerRect.left);
+    };
+
+    updateDesktopMenuPosition();
+    window.addEventListener("resize", updateDesktopMenuPosition);
+
+    return () => window.removeEventListener("resize", updateDesktopMenuPosition);
+  }, [openDesktopMenu]);
+
   const closeMobileMenu = () => {
     setIsMobileMenuOpen(false);
     setOpenMobileGroup(null);
@@ -215,6 +255,9 @@ export default function Navbar({ articleId }: NavbarProps) { // 接收 articleId
               <div
                 key={item.name}
                 className="relative"
+                ref={(element) => {
+                  desktopMenuTriggerRefs.current[item.name] = element;
+                }}
               >
                 <button
                   type="button"
@@ -241,15 +284,25 @@ export default function Navbar({ articleId }: NavbarProps) { // 接收 articleId
                 </button>
 
                 <div
-                  className={`absolute left-1/2 top-full z-20 mt-4 -translate-x-1/2 transition-all duration-200 ${
+                  ref={(element) => {
+                    desktopMenuPanelRefs.current[item.name] = element;
+                  }}
+                  className={`absolute top-full z-20 mt-4 transition-all duration-200 ${
                     openDesktopMenu === item.name
                       ? "visible translate-y-0 opacity-100"
                       : "pointer-events-none invisible -translate-y-2 opacity-0"
                   }`}
+                  style={
+                    openDesktopMenu === item.name
+                      ? { left: desktopMenuLeft ?? 0 }
+                      : undefined
+                  }
                 >
                   <div
                     className={`rounded-[1.75rem] border border-[#E5D8D1] bg-[rgba(255,252,249,0.96)] p-3 shadow-[0_24px_60px_rgba(58,58,58,0.12)] backdrop-blur-sm ${
-                      item.items.length > 1 ? "w-[28rem]" : "w-64"
+                      item.items.length > 1
+                        ? "w-[28rem] max-w-[calc(100vw-2rem)]"
+                        : "w-64 max-w-[calc(100vw-2rem)]"
                     }`}
                   >
                     <div className={item.items.length > 1 ? "grid grid-cols-2 gap-2" : "grid gap-2"}>
