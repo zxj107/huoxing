@@ -8,7 +8,10 @@ import {
   MessageSquare,
   Send,
   Trash2,
+  X,
 } from "lucide-react";
+
+import Link from "next/link";
 
 import { submitEcho, type Echo } from "@/app/actions/echoes";
 import { deleteEcho } from "@/app/actions/echo-delete";
@@ -52,6 +55,13 @@ export default function EchoSection({
   const [replyMessage, setReplyMessage] = useState("");
   const [likeToastId, setLikeToastId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginModalMessage, setLoginModalMessage] = useState("");
+
+  const showLoginPrompt = (msg: string) => {
+    setLoginModalMessage(msg);
+    setShowLoginModal(true);
+  };
 
   const topEchoes = echoes.filter((echo) => !echo.rootId);
   const replyMap = new Map<string, Echo[]>();
@@ -128,7 +138,7 @@ export default function EchoSection({
 
   const handleLike = (echoId: string) => {
     if (!isLoggedIn) {
-      alert("请先登录后再点赞");
+      showLoginPrompt("请先登录后再点赞");
       return;
     }
 
@@ -159,7 +169,7 @@ export default function EchoSection({
 
   const openReply = (echoId: string) => {
     if (!isLoggedIn) {
-      alert("请先登录后再回复");
+      showLoginPrompt("请先登录后再回复");
       return;
     }
 
@@ -358,81 +368,108 @@ export default function EchoSection({
   );
 
   return (
-    <section className="mt-20 border-t border-[#D7CCC8]/40 pt-12">
-      <div className="mb-8 flex items-center gap-3">
-        <MessageSquare className="h-5 w-5 text-[#A1887F]" />
-        <h2 className="font-youyou text-2xl tracking-widest text-[#3A3A3A]">
-          Echoes 回响
-        </h2>
-      </div>
+    <>
+      <section className="mt-20 border-t border-[#D7CCC8]/40 pt-12">
+        <div className="mb-8 flex items-center gap-3">
+          <MessageSquare className="h-5 w-5 text-[#A1887F]" />
+          <h2 className="font-youyou text-2xl tracking-widest text-[#3A3A3A]">
+            Echoes 回响
+          </h2>
+        </div>
 
-      <div className="space-y-0 divide-y divide-[#E8E4DF]/60">
-        {echoes.length === 0 ? (
-          <p className="py-6 text-center text-sm text-[#9E9E9E]">
-            旷野安静，等待第一声回响。
-          </p>
-        ) : (
-          topEchoes.map((top) => {
-            const replies = replyMap.get(top.id) ?? [];
-            return (
-              <div key={top.id} className="space-y-4 py-4 first:pt-0">
-                {renderEchoItem(top, false)}
-                {replies.map((reply) => renderEchoItem(reply, true))}
-              </div>
-            );
-          })
-        )}
-      </div>
+        <div className="space-y-0 divide-y divide-[#E8E4DF]/60">
+          {echoes.length === 0 ? (
+            <p className="py-6 text-center text-sm text-[#9E9E9E]">
+              旷野安静，等待第一声回响。
+            </p>
+          ) : (
+            topEchoes.map((top) => {
+              const replies = replyMap.get(top.id) ?? [];
+              return (
+                <div key={top.id} className="space-y-4 py-4 first:pt-0">
+                  {renderEchoItem(top, false)}
+                  {replies.map((reply) => renderEchoItem(reply, true))}
+                </div>
+              );
+            })
+          )}
+        </div>
 
-      {isLoggedIn ? (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            publishTop();
-          }}
-          className="mt-6 flex items-center gap-3"
-        >
-          <div className="relative flex-1">
-            <input
-              type="text"
-              value={content}
-              onChange={(event) => setContent(event.target.value)}
-              placeholder="写下你的回响..."
-              className="w-full rounded-full border border-[#E0DAD6] bg-white py-2.5 pl-4 pr-12 text-sm text-[#3A3A3A] transition-colors focus:border-[#A1887F] focus:outline-none"
-              required
-            />
-            <button
-              type="submit"
-              disabled={isPending}
-              className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-full p-2 text-[#A1887F] transition-colors hover:bg-[#F4EFEA] disabled:opacity-50"
-              aria-label="发送回响"
-            >
-              <Send className="h-4 w-4" />
-            </button>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setAnonymous((value) => !value)}
-            disabled={isPending}
-            className={`shrink-0 rounded-full border px-3 py-2 text-[11px] transition-colors ${
-              anonymous
-                ? "border-[#A1887F] bg-[#A1887F] text-white"
-                : "border-[#D7CCC8] text-[#9E9E9E] hover:border-[#A1887F] hover:text-[#A1887F]"
-            }`}
+        {isLoggedIn ? (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              publishTop();
+            }}
+            className="mt-6 flex items-center gap-3"
           >
-            匿名
-          </button>
-        </form>
-      ) : (
-        <p className="mt-6 text-center text-sm text-[#9E9E9E]">
-          请先点亮身份，再留下你的星火。
-        </p>
-      )}
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={content}
+                onChange={(event) => setContent(event.target.value)}
+                placeholder="写下你的回响..."
+                className="w-full rounded-full border border-[#E0DAD6] bg-white py-2.5 pl-4 pr-12 text-sm text-[#3A3A3A] transition-colors focus:border-[#A1887F] focus:outline-none"
+                required
+              />
+              <button
+                type="submit"
+                disabled={isPending}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-full p-2 text-[#A1887F] transition-colors hover:bg-[#F4EFEA] disabled:opacity-50"
+                aria-label="发送回响"
+              >
+                <Send className="h-4 w-4" />
+              </button>
+            </div>
 
-      {message ? (
-        <p className="mt-2 text-center text-xs text-[#9E9E9E]">{message}</p>
-      ) : null}
-    </section>
+            <button
+              type="button"
+              onClick={() => setAnonymous((value) => !value)}
+              disabled={isPending}
+              className={`shrink-0 rounded-full border px-3 py-2 text-[11px] transition-colors ${
+                anonymous
+                  ? "border-[#A1887F] bg-[#A1887F] text-white"
+                  : "border-[#D7CCC8] text-[#9E9E9E] hover:border-[#A1887F] hover:text-[#A1887F]"
+              }`}
+            >
+              匿名
+            </button>
+          </form>
+        ) : (
+          <p className="mt-6 text-center text-sm text-[#9E9E9E]">
+            请先点亮身份，再留下你的星火。
+          </p>
+        )}
+
+        {message ? (
+          <p className="mt-2 text-center text-xs text-[#9E9E9E]">{message}</p>
+        ) : null}
+      </section>
+
+      {showLoginModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowLoginModal(false)}>
+          <div className="relative w-80 rounded-2xl bg-white p-8 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setShowLoginModal(false)}
+              className="absolute right-4 top-4 text-[#9E9E9E] transition-colors hover:text-[#5D5D5D]"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div className="text-center">
+              <p className="mb-6 font-serif text-lg text-[#5D5D5D]">{loginModalMessage}</p>
+              <Link
+                href="/login"
+                onClick={() => setShowLoginModal(false)}
+                className="inline-flex items-center rounded-full bg-[#A1887F] px-8 py-2.5 text-sm text-white transition-colors hover:bg-[#8D6E63]"
+              >
+                去登录
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
+
+
